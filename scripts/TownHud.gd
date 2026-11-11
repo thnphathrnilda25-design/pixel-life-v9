@@ -35,6 +35,22 @@ const TAB_DEFS := [
 	["business", "ธุรกิจ"], ["social", "สังคม"], ["festival", "เทศกาล"],
 	["health", "สุขภาพ"], ["love", "ความรัก"], ["life", "ชีวิต"], ["outfits", "ชุด"],
 ]
+## v10: รวม 16 แท็บเหลือ 5 กลุ่ม — ลดความงง
+const TAB_GROUPS := [
+	["today", "วันนี้"],
+	["character", "ตัวละคร"],
+	["work", "งาน/เงิน"],
+	["home", "บ้าน"],
+	["life", "ชีวิต"],
+]
+const TAB_GROUP_MAP := {
+	"today": "today", "overview": "today",
+	"character": "character", "skills": "character", "health": "character", "outfits": "character",
+	"work": "work", "career": "work", "money": "work", "business": "work",
+	"home": "home", "farm": "home", "hobby": "home",
+	"life": "life", "love": "life", "social": "life", "festival": "life",
+	"awards": "life", "quests": "life",
+}
 const BUS_ZONES := ["home_street", "school_district", "downtown", "park"]
 
 var _font_regular: Font
@@ -44,6 +60,7 @@ var _zone_label: Label
 var _date_label: Label
 var _weather_label: Label
 var _money_label: Label
+var _plan_label: Label
 var _bars := {}
 var _prompt_label: Label
 var _run_label: Label
@@ -75,6 +92,7 @@ func _ready() -> void:
 	_build_toast()
 	Game.changed.connect(_on_game_changed)
 	Game.day_changed.connect(_on_day_changed)
+	Game.plan_result.connect(_on_plan_result)
 	_sync_pause()
 	refresh()
 
@@ -90,6 +108,53 @@ func _process(delta: float) -> void:
 		_prompt_label.visible = (not busy) and _prompt_text != ""
 	if not Game.alive and not _gameover_shown:
 		show_game_over()
+	_maybe_show_event()
+
+
+func _on_plan_result(text: String) -> void:
+	toast(text)
+
+
+var _event_day_shown := -1
+
+func _maybe_show_event() -> void:
+	if Game.pending_event.is_empty() or not Game.alive:
+		return
+	if _event_day_shown == Game.day or busy:
+		return
+	_event_day_shown = Game.day
+	_show_event_dialog()
+
+
+func _show_event_dialog() -> void:
+	var ev: Dictionary = Game.pending_event
+	if ev.is_empty():
+		return
+	var text := String(ev.get("text", "มีเรื่องเกิดขึ้น"))
+	var btns: Array = []
+	var opts: Array = ev.get("options", [])
+	for i in opts.size():
+		var o: Dictionary = opts[i]
+		var cost := int(o.get("cost", 0))
+		var label := String(o.get("label", "เลือก"))
+		if cost > 0:
+			label += " (฿%s)" % Game.fmt_money(cost)
+		btns.append({
+			"text": label,
+			"cb": _on_event_resolve.bind(i),
+			"disabled": cost > Game.money,
+		})
+	if btns.is_empty():
+		btns.append({"text": "รับเรื่อง", "cb": _on_event_resolve.bind(0)})
+	_open_dialog("เรื่องที่เกิดขึ้น", text, btns)
+
+
+func _on_event_resolve(index: int) -> void:
+	var res := Game.resolve_event(index)
+	close_dialog()
+	_show_result(res)
+	if _modal != null:
+		open_summary("today")
 
 
 func _on_game_changed() -> void:
@@ -98,6 +163,8 @@ func _on_game_changed() -> void:
 
 func _on_day_changed() -> void:
 	_restart_armed = false
+	if Game.alive and Game.day_plan.is_empty() and not busy:
+		open_summary("today")
 
 
 # ============================================================
@@ -192,12 +259,17 @@ func _build_top_bar() -> void:
 	_date_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
 	_weather_label = _label(row, "", 13, Color("#d8c8a8"))
-	_weather_label.custom_minimum_size = Vector2(200, 0)
+	_weather_label.custom_minimum_size = Vector2(150, 0)
 	_weather_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(spacer)
+
+	_plan_label = _label(row, "แผน -", 12, Color("#c8b890"))
+	_plan_label.custom_minimum_size = Vector2(86, 0)
+	_plan_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_plan_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
 	_money_label = _label(row, "฿0", 17, Color("#f2c85a"), true)
 	_money_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -386,6 +458,22 @@ func refresh() -> void:
 	if not fest.is_empty():
 		_weather_label.text += " • %s" % String(fest.get("name", "เทศกาล"))
 	_money_label.text = "฿%s" % Game.fmt_money(Game.money)
+	if _plan_label != null:
+		var pl_done := 0
+		var pl_planned := 0
+		for s in Game.PLAN_SLOTS:
+			var sid := String(s["id"])
+			if String(Game.day_plan.get(sid, "")) != "":
+				pl_planned += 1
+				if Game.plan_status(sid) == "done":
+					pl_done += 1
+		if pl_planned == 0:
+			_plan_label.text = "แผน -"
+			_plan_label.add_theme_color_override("font_color", Color("#c8b890"))
+		else:
+			_plan_label.text = "แผน %d/%d" % [pl_done, pl_planned]
+			var col := Color("#9ad07a") if pl_done >= pl_planned else Color("#f2c85a")
+			_plan_label.add_theme_color_override("font_color", col)
 	for def in BAR_DEFS:
 		var key := String(def["key"])
 		if _bars.has(key):
@@ -566,55 +654,34 @@ func _kv_grid(parent: Node, pairs: Array) -> void:
 # ============================================================
 #  แผงสรุป
 # ============================================================
-func open_summary(tab: String = "overview") -> void:
-	_summary_tab = tab
-	var body := _open_modal("ชีวิตของ %s" % Game.player_name, 840, 486)
+func open_summary(tab: String = "today") -> void:
+	var gid := String(TAB_GROUP_MAP.get(tab, "today"))
+	_summary_tab = gid
+	var body := _open_modal("ชีวิตของ %s" % Game.player_name, 860, 500)
 	var tab_grid := GridContainer.new()
-	tab_grid.columns = 8
+	tab_grid.columns = 5
 	tab_grid.add_theme_constant_override("h_separation", 4)
 	tab_grid.add_theme_constant_override("v_separation", 4)
 	body.add_child(tab_grid)
-	for def in TAB_DEFS:
+	for def in TAB_GROUPS:
 		var id := String(def[0])
-		var b := _btn(tab_grid, String(def[1]), _on_tab_pressed.bind(id), Color(0.42, 0.3, 0.2), 88)
-		b.custom_minimum_size = Vector2(90, 26)
-		b.add_theme_font_size_override("font_size", 11)
-		if id == tab:
+		var b := _btn(tab_grid, String(def[1]), _on_tab_pressed.bind(id), Color(0.42, 0.3, 0.2), 150)
+		b.custom_minimum_size = Vector2(154, 30)
+		b.add_theme_font_size_override("font_size", 13)
+		if id == gid:
 			b.modulate = Color(1.3, 1.18, 0.92)
 	_sep(body)
-	match tab:
-		"overview":
-			_summary_overview(body)
-		"career":
-			_summary_career(body)
-		"money":
-			_summary_money(body)
-		"skills":
-			_summary_skills(body)
+	match gid:
+		"today":
+			_summary_g_today(body)
+		"character":
+			_summary_g_character(body)
+		"work":
+			_summary_g_work(body)
 		"home":
-			_summary_home(body)
-		"farm":
-			_summary_farm(body)
-		"hobby":
-			_summary_hobby(body)
-		"awards":
-			_summary_awards(body)
-		"quests":
-			_summary_quests(body)
-		"business":
-			_summary_business(body)
-		"social":
-			_summary_social(body)
-		"festival":
-			_summary_festival(body)
-		"health":
-			_summary_health(body)
-		"love":
-			_summary_love(body)
+			_summary_g_home(body)
 		"life":
-			_summary_life(body)
-		"outfits":
-			_summary_outfits(body)
+			_summary_g_life(body)
 
 
 func _on_tab_pressed(id: String) -> void:
@@ -622,23 +689,143 @@ func _on_tab_pressed(id: String) -> void:
 	open_summary(id)
 
 
-func _summary_overview(body: VBoxContainer) -> void:
-	_section(body, "สถานะวันนี้")
-	var goals: Array[String] = []
-	if Game.is_school_day() and not Game.school_attended_today:
-		goals.append("ไปโรงเรียนก่อน 15:00")
-	if not Game.is_child() and Game.job_id != "" and Game.is_workday() and not Game.worked_today:
-		goals.append("ไปทำงานที่ %s ก่อน 17:00" % TownData.zone_name(Game.current_workplace()))
-	if Game.is_home_time():
-		goals.append("กลับบ้านกินข้าวกับพ่อแม่")
-	var fest := Game.festival_today()
-	if not fest.is_empty() and not Game.festival_attended_today():
-		goals.append("วันนี้มี%s ที่%s" % [String(fest["name"]), TownData.zone_name(String(fest["zone"]))])
-	if goals.is_empty():
-		goals.append("เดินเล่น ทำธุระ หรือออกกำลังกาย")
-	for g in goals:
-		_label(body, "• " + g, 13, Color("#8a4a24"))
+func _hhmm(minutes: int) -> String:
+	var m := minutes % (24 * 60)
+	return "%02d:%02d" % [int(m / 60), m % 60]
 
+
+func _summary_g_today(body: VBoxContainer) -> void:
+	_section(body, "แผนของวันนี้")
+	_label(body, "เลือก 1 กิจกรรมต่อช่วงเวลา • ทำสำเร็จได้โบนัส • ไม่ทำตามแผนจะเสียเครียดและเงิน", 11, DIM_TEXT)
+	for slot in Game.PLAN_SLOTS:
+		_plan_slot_row(body, slot)
+	_kv_grid(body, [
+		["ทำสำเร็จ", "%d ครั้ง" % Game.plan_total_done],
+		["ผิดแผน", "%d ครั้ง" % Game.plan_total_miss],
+		["ต่อเนื่อง", "%d วัน (สูงสุด %d)" % [Game.plan_streak, Game.plan_best_streak]],
+	])
+
+	if not Game.pending_event.is_empty():
+		_sep(body)
+		_section(body, "เรื่องที่รอตัดสินใจ")
+		_label(body, String(Game.pending_event.get("text", "")), 12, Color("#8a4a24"))
+		_btn(body, "เปิดเรื่องนี้", _show_event_dialog, Color(0.5, 0.32, 0.2), 180)
+
+	_sep(body)
+	_section(body, "ควรทำอะไรต่อ")
+	for s in Game.next_steps():
+		var tab := String(s.get("tab", "today"))
+		_btn(body, "→ " + String(s.get("text", "")), _on_next_step.bind(tab), Color(0.36, 0.42, 0.3), 420)
+
+	_sep(body)
+	_section(body, "เงินและบิล")
+	var days_to_bills := 28 - ((Game.day - 1) % 28)
+	_kv_grid(body, [
+		["เงินสด", "฿%s" % Game.fmt_money(Game.money)],
+		["รายรับ/เดือน", "฿%s" % Game.fmt_money(Game.monthly_income())],
+		["รายจ่าย/เดือน", "฿%s" % Game.fmt_money(Game.living_cost())],
+		["บิลรอบถัดไป", "อีก %d วัน" % days_to_bills],
+	])
+
+	_sep(body)
+	_section(body, "อ่านค่าสถานะ")
+	_label(body, "สุขภาพ — ต่ำแล้วป่วยง่ายและฟื้นช้า", 11, DIM_TEXT)
+	_label(body, "ความอิ่ม — ต่ำกว่า 25 จะเริ่มเสียสุขภาพ", 11, DIM_TEXT)
+	_label(body, "พลังงาน — ใช้ทำทุกกิจกรรม หมดแล้วเป็นลม", 11, DIM_TEXT)
+	_label(body, "ความเครียด — เกิน 80 เสียสุขภาพ ถึง 90 หมดไฟ", 11, DIM_TEXT)
+	_label(body, "ความสุข — ยิ่งต่ำ ยิ่งพลาดง่ายและหมดแรงใจ", 11, DIM_TEXT)
+
+
+func _plan_slot_row(body: VBoxContainer, slot: Dictionary) -> void:
+	var sid := String(slot["id"])
+	var st := Game.plan_status(sid)
+	var chosen := String(Game.day_plan.get(sid, ""))
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	body.add_child(head)
+	var title := "%s %s  %s-%s" % [
+		String(slot.get("emoji", "")), String(slot["name"]),
+		_hhmm(int(slot["start"])), _hhmm(int(slot["end"])),
+	]
+	_label(head, title, 13, TEXT, true)
+	if st == "done":
+		_label(head, "✅ สำเร็จ", 12, LEAF, true)
+	elif st == "miss":
+		_label(head, "❌ ผิดแผน", 12, Color("#b0483c"), true)
+	elif chosen != "":
+		_label(head, "เลือก: %s" % Game.plan_option_label(chosen), 12, GOLD, true)
+	else:
+		_label(head, "ยังไม่เลือก (ปล่อยว่างได้)", 11, DIM_TEXT)
+	if st != "":
+		return
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	body.add_child(row)
+	for opt in Game.plan_option_ids():
+		var reason := Game.plan_block_reason(sid, opt)
+		var btn_text := Game.plan_option_label(opt)
+		if opt == chosen:
+			btn_text = "✓ " + btn_text
+		var b := _btn(row, btn_text, _on_plan_pick.bind(sid, opt), Color(0.42, 0.34, 0.24), 118)
+		b.add_theme_font_size_override("font_size", 11)
+		b.custom_minimum_size = Vector2(120, 26)
+		b.disabled = reason != ""
+		b.tooltip_text = reason if reason != "" else Game.plan_option_hint(opt)
+		if opt == chosen:
+			b.modulate = Color(1.25, 1.18, 0.95)
+
+
+func _on_plan_pick(slot: String, opt: String) -> void:
+	_show_result(Game.set_plan(slot, opt))
+	open_summary("today")
+
+
+func _on_next_step(tab: String) -> void:
+	open_summary(tab)
+
+
+func _summary_g_character(body: VBoxContainer) -> void:
+	_summary_overview(body)
+	_sep(body)
+	_summary_skills(body)
+	_sep(body)
+	_summary_health(body)
+	_sep(body)
+	_summary_outfits(body)
+
+
+func _summary_g_work(body: VBoxContainer) -> void:
+	_summary_career(body)
+	_sep(body)
+	_summary_money(body)
+	_sep(body)
+	_summary_business(body)
+
+
+func _summary_g_home(body: VBoxContainer) -> void:
+	_summary_home(body)
+	_sep(body)
+	_summary_farm(body)
+	_sep(body)
+	_summary_hobby(body)
+
+
+func _summary_g_life(body: VBoxContainer) -> void:
+	_summary_love(body)
+	_sep(body)
+	_summary_social(body)
+	_sep(body)
+	_summary_festival(body)
+	_sep(body)
+	_summary_awards(body)
+	_sep(body)
+	_summary_quests(body)
+	_sep(body)
+	_summary_life(body)
+
+
+func _summary_overview(body: VBoxContainer) -> void:
+	_section(body, "ภาพรวมชีวิต")
 	_kv_grid(body, [
 		["ชื่อ", "%s (%s)" % [Game.player_name, Game.gender]],
 		["อายุ", "%d ปี • %s" % [Game.age, Game.stage_name()]],

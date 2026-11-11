@@ -57,8 +57,15 @@ func _ready() -> void:
 	_test_creation_flow()
 	_test_v8_quests()
 	_test_v8_goals()
+	_test_v10_day_plan()
+	_test_v10_plan_miss()
+	_test_v10_all_bonus()
+	_test_v10_event()
+	_test_v10_plan_save()
+	_test_v10_new_day_reset()
+	_test_v10_hud_groups()
 
-	print("\n===== SMOKE TEST v9 =====")
+	print("\n===== SMOKE TEST v10 =====")
 	for line in ok:
 		print("PASS  ", line)
 	for line in bad:
@@ -958,13 +965,13 @@ func _test_save_load() -> void:
 		and Game.has_quest_certificate("bronze"), "เซฟ/โหลดตัวนับและใบประกาศได้")
 	Game.time_paused = true
 
-	# ไฟล์เซฟต้องเป็นเวอร์ชัน 9
+	# ไฟล์เซฟต้องเป็นเวอร์ชัน 10
 	if FileAccess.file_exists("user://pixel_life.save"):
 		var f := FileAccess.open("user://pixel_life.save", FileAccess.READ)
 		var raw := f.get_as_text()
 		var parsed = JSON.parse_string(raw)
-		_check(typeof(parsed) == TYPE_DICTIONARY and int(parsed.get("version", 0)) == 9,
-			"ไฟล์เซฟเป็นเวอร์ชัน 9")
+		_check(typeof(parsed) == TYPE_DICTIONARY and int(parsed.get("version", 0)) == 10,
+			"ไฟล์เซฟเป็นเวอร์ชัน 10")
 
 
 # ============================================================
@@ -1537,3 +1544,97 @@ func _test_v8_goals() -> void:
 		"warm", "black", "short", "career")
 	_check(Game.life_goal == "career", "สร้างตัวละครพร้อมเลือกเป้าหมายชีวิตได้")
 	_check(Game.quests.size() == Game.QUEST_WEEK_COUNT, "เริ่มชีวิตแล้วมีภารกิจประจำสัปดาห์")
+
+
+# ============================================================
+#  v10 — แผนวัน / เหตุการณ์ / กลุ่มแท็บ
+# ============================================================
+
+func _test_v10_day_plan() -> void:
+	_fresh(22)
+	Game.job_id = "account"
+	Game.weekday = 2
+	Game.time_min = 9 * 60
+	Game.worked_today = false
+	var r := Game.set_plan("morning", "work")
+	_check(bool(r.get("ok", false)), "วางแผนเช้าเป็นทำงานได้")
+	_check(String(Game.day_plan.get("morning", "")) == "work", "เก็บแผนเช้าไว้แล้ว")
+	_check(Game.plan_block_reason("afternoon", "work") == "", "บ่ายยังเลือกงานได้")
+	Game.work_shift(80)
+	_check(Game.plan_status("morning") == "done", "ทำงานแล้วแผนเช้าสำเร็จ")
+	_check(Game.plan_total_done >= 1, "นับจำนวนแผนที่ทำสำเร็จ")
+	_check(Game.money > 0, "ทำงานตามแผนได้เงิน")
+
+
+func _test_v10_plan_miss() -> void:
+	_fresh(22)
+	Game.time_min = 9 * 60
+	Game.set_plan("morning", "social")
+	_check(String(Game.day_plan.get("morning", "")) == "social", "วางแผนเช้าเป็นพบผู้คนได้")
+	Game.money = 500
+	var m0 := Game.money
+	var s0 := Game.stress
+	Game.advance_minutes(200)
+	_check(Game.plan_status("morning") == "miss", "เลยเวลาแล้วแผนเช้าถือว่าผิดแผน")
+	_check(Game.money < m0, "ผิดแผนโดนหักเงิน")
+	_check(Game.stress > s0, "ผิดแผนทำให้เครียดขึ้น")
+	_check(Game.plan_total_miss >= 1, "นับจำนวนครั้งที่ผิดแผน")
+
+
+func _test_v10_all_bonus() -> void:
+	_fresh(22)
+	Game.money = 1000
+	for slot in ["morning", "afternoon", "evening"]:
+		Game.day_plan[slot] = "rest"
+		Game.plan_state[slot] = "done"
+	var m0 := Game.money
+	Game._finish_day_plan([])
+	_check(Game.money >= m0 + Game.PLAN_ALL_BONUS, "ทำครบ 3 ช่องได้โบนัส")
+	_check(Game.plan_streak >= 1, "นับสตรีคแผนวัน")
+
+
+func _test_v10_event() -> void:
+	_fresh(22)
+	Game.happy = 50
+	Game.pending_event = {
+		"id": "test_event",
+		"text": "เหตุการณ์ทดสอบ",
+		"options": [
+			{"label": "รับไป", "cost": 0, "effects": {"happy": 7}},
+		],
+	}
+	var res := Game.resolve_event(0)
+	_check(bool(res.get("ok", false)), "ตัดสินใจเหตุการณ์ได้")
+	_check(Game.pending_event.is_empty(), "เหตุการณ์ถูกเคลียร์หลังเลือก")
+	_check(Game.happy > 50, "ผลของเหตุการณ์มีผลจริง")
+
+
+func _test_v10_plan_save() -> void:
+	_fresh(22)
+	Game.set_plan("evening", "rest")
+	Game.save_game()
+	Game.day_plan = {}
+	Game.plan_state = {}
+	Game.load_game()
+	_check(String(Game.day_plan.get("evening", "")) == "rest", "แผนวันถูกบันทึกในเซฟ")
+
+
+func _test_v10_new_day_reset() -> void:
+	_fresh(22)
+	Game.day_plan["morning"] = "rest"
+	Game.plan_state["morning"] = "done"
+	Game.time_min = 20 * 60
+	Game.sleep_now(6 * 60)
+	_check(Game.day_plan.is_empty(), "ขึ้นวันใหม่แล้วล้างแผนเก่า")
+	_check(Game.plan_state.is_empty(), "ขึ้นวันใหม่แล้วล้างสถานะแผน")
+
+
+func _test_v10_hud_groups() -> void:
+	_fresh(22)
+	town.hud.close_all()
+	_check(town.hud.TAB_GROUPS.size() == 5, "แผงสรุปเหลือ 5 กลุ่ม")
+	for g in ["today", "character", "work", "home", "life"]:
+		town.hud.open_summary(String(g))
+		_check(town.hud.get_busy(), "เปิดกลุ่ม %s ได้" % g)
+		town.hud.close_modal()
+	_check(not town.hud.get_busy(), "ปิดกลุ่มสรุปได้")

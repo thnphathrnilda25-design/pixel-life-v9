@@ -13,9 +13,10 @@ signal changed
 signal time_changed
 signal day_changed
 signal passed_out
+signal plan_result(text: String)
 
 const SAVE_PATH := "user://pixel_life.save"
-const SAVE_VERSION := 9
+const SAVE_VERSION := 10
 const EVENT_CHANCE := 0.22        # โอกาสเจอเหตุการณ์ต่อสัปดาห์ (วัยผู้ใหญ่)
 const CHILD_EVENT_CHANCE := 0.35  # โอกาสเจอเหตุการณ์ต่อปี (วัยเด็ก)
 const ADULT_AGE := 18
@@ -295,6 +296,33 @@ const SEASON_NAMES := ["ฤดูใบไม้ผลิ", "ฤดูร้อ�
 const WEEKDAY_NAMES := ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์", "อาทิตย์"]
 const WEATHER_NAMES := {"sun": "แดดออก", "rain": "ฝนตก", "snow": "หิมะตก", "cloud": "เมฆมาก"}
 
+# ---------- แผนวัน v10 (แกนเล่นใหม่) ----------
+const PLAN_SLOTS := [
+	{"id": "morning", "name": "เช้า", "start": 6 * 60, "end": 12 * 60, "emoji": "🌅"},
+	{"id": "afternoon", "name": "บ่าย", "start": 12 * 60, "end": 18 * 60, "emoji": "☀️"},
+	{"id": "evening", "name": "เย็น", "start": 18 * 60, "end": 24 * 60, "emoji": "🌙"},
+]
+const PLAN_OPTIONS := {
+	"work": {"label": "ทำงาน", "hint": "ได้เงิน • ประสิทธิภาพ", "tags": ["work"]},
+	"school": {"label": "ไปโรงเรียน", "hint": "เกรด • ความรู้", "tags": ["school"]},
+	"study": {"label": "เรียน/อ่านหนังสือ", "hint": "ทักษะ • เกรด", "tags": ["study"]},
+	"farm": {"label": "ดูแลสวน", "hint": "ปลูก • รดน้ำ • เก็บเกี่ยว", "tags": ["farm"]},
+	"social": {"label": "พบผู้คน", "hint": "ความสัมพันธ์ • ความสุข", "tags": ["social"]},
+	"exercise": {"label": "ออกกำลังกาย", "hint": "สุขภาพ • ลดเครียด", "tags": ["exercise"]},
+	"rest": {"label": "พักผ่อน", "hint": "ฟื้นพลังงาน", "tags": ["rest"]},
+}
+const PLAN_ADULT_OPTIONS := ["work", "study", "farm", "social", "exercise", "rest"]
+const PLAN_CHILD_OPTIONS := ["school", "study", "social", "rest"]
+const PLAN_DONE_HAPPY := 4        # ทำตามแผนสำเร็จ
+const PLAN_DONE_STRESS := 3
+const PLAN_DONE_MONEY := 60       # โบนัสเล็กน้อย
+const PLAN_MISS_STRESS := 6       # ผิดแผน
+const PLAN_MISS_HAPPY := 5
+const PLAN_MISS_MONEY := 50
+const PLAN_ALL_BONUS := 250       # ทำครบ 3 ช่อง
+const PLAN_ALL_FAME := 1
+const DAILY_EVENT_CHANCE := 0.30  # เหตุการณ์สุ่มต่อวัน (ผู้ใหญ่)
+
 # ---------- ค่าใช้จ่าย v4 ----------
 const COST_GYM := 80          # ค่าเข้าโรงยิม/ครั้ง
 const COST_SNACK := 60        # ขนม/น้ำดื่มร้านสะดวกซื้อ
@@ -320,11 +348,11 @@ const COST_SOCIAL := 400     # ออกไปสังสรรค์
 const COST_DATE := 300       # ออกเดท
 const COST_RING := 5000      # แหวนแต่งงาน
 const COST_CHILD := 3000     # ค่าใช้จ่ายเตรียมมีลูก
-const COST_RENT := 1800      # ค่าเช่าห้อง/เดือน
-const COST_UTIL := 400       # ค่าน้ำค่าไฟ/เดือน
-const COST_PHONE := 200      # ค่าโทรศัพท์/เดือน
-const COST_TRANSPORT := 600  # ค่าเดินทาง/เดือน
-const COST_INSURANCE := 600  # เบี้ยประกันสุขภาพ/เดือน
+const COST_RENT := 2800      # ค่าเช่าห้อง/เดือน
+const COST_UTIL := 700       # ค่าน้ำค่าไฟ/เดือน
+const COST_PHONE := 300      # ค่าโทรศัพท์/เดือน
+const COST_TRANSPORT := 800  # ค่าเดินทาง/เดือน
+const COST_INSURANCE := 700  # เบี้ยประกันสุขภาพ/เดือน
 const COST_PER_CHILD := 700  # ค่าเลี้ยงลูก/เดือน (คนแรก)
 const COST_CHILD_SCHOOL := 300  # เพิ่มเมื่อลูกอายุ 6+
 const COST_CHILD_TEEN := 400    # เพิ่มเมื่อลูกอายุ 12+
@@ -541,6 +569,16 @@ var tax_paid := 0
 var life_log: Array[String] = []
 var pending_event := {}
 
+# ---------- แผนวัน v10 ----------
+var day_plan := {}                 # slot_id -> option_id
+var plan_state := {}               # slot_id -> "done" / "miss"
+var plan_streak := 0
+var plan_best_streak := 0
+var plan_total_done := 0
+var plan_total_miss := 0
+var event_day := -1                # วันที่สุ่มเหตุการณ์ล่าสุด
+var burnout := false               # เครียดสะสมจนหมดไฟ
+
 # ---------- สถานะโลก v4 ----------
 var time_min := DAY_START_MIN
 var day := 1
@@ -679,6 +717,7 @@ func advance_minutes(minutes: int) -> void:
 			time_changed.emit()
 			changed.emit()
 	_clamp_stats()
+	_resolve_passed_slots()
 	time_changed.emit()
 
 
@@ -692,9 +731,9 @@ func advance_minutes_to(target: int, notes: Array[String] = []) -> void:
 func _tick_needs_minute() -> void:
 	# ความอิ่ม/พลังงานลดตามเวลา (ช้า ๆ พอให้ทันกิน/นอน)
 	# ใช้ตัวนับนาทีเพื่อลดแบบจำนวนเต็ม (1 อิ่ม ต่อ ~45 นาที, 1 พลังงาน ต่อ ~83 นาที)
-	if _minute_count % 45 == 0:
+	if _minute_count % 40 == 0:
 		hunger = maxi(hunger - 1, 0)
-	if _minute_count % 83 == 0:
+	if _minute_count % 60 == 0:
 		energy = maxi(energy - 1, 0)
 	if weather == "rain" and zone_id != "home" and _minute_count % 60 == 0:
 		happy = clampi(happy - 1, 0, 100)
@@ -748,7 +787,12 @@ func sleep_now(wake_min: int) -> Dictionary:
 	hours = minf(hours, 12.0)
 	var notes: Array[String] = ["😴 นอนหลับ %.0f ชั่วโมง" % hours]
 
+	_plan_mark("rest")
 	energy = 100
+	if burnout:
+		energy = 65
+		burnout = false
+		notes.append("ยังเพลียจากความเครียด — พรุ่งนี้เริ่มด้วยพลังงาน 65")
 	hunger = clampi(hunger - int(hours * 5.0), 0, 100)
 	var stress_heal := int(hours * 4.0) + (2 if has_karma("grounded") else 0)
 	stress = clampi(stress - stress_heal, 0, 100)
@@ -797,6 +841,11 @@ func _end_day(notes: Array[String], sleep_hours: float) -> void:
 			notes.append("❌ ถูกเลิกจ้างเพราะขาดงานบ่อย (%s)" % old)
 			log_event("ถูกเลิกจ้างเพราะขาดงาน")
 
+	if stress >= 90:
+		burnout = true
+		notes.append("🔥 หมดไฟ (เครียด %d/100) — พรุ่งนี้เริ่มวันด้วยพลังน้อย" % stress)
+		log_event("หมดไฟจากการเครียดสะสม")
+
 	_advance_calendar(notes)
 	_birthday_check(notes)
 	school_attended_today = false
@@ -807,6 +856,7 @@ func _end_day(notes: Array[String], sleep_hours: float) -> void:
 
 
 func _advance_calendar(notes: Array[String]) -> void:
+	_finish_day_plan(notes)
 	day += 1
 	days_played += 1
 	weekday = (weekday % 7) + 1
@@ -828,7 +878,251 @@ func _advance_calendar(notes: Array[String]) -> void:
 	_rumor_new_day()
 	_ensure_quest_week()
 	check_achievements()
+	day_plan.clear()
+	plan_state.clear()
+	_roll_daily_event()
 	notes.append("🌅 วันที่ %d • %s • %s" % [day, weekday_name(), weather_name()])
+
+
+# ============================================================
+#  แผนวัน v10 — แกนเล่นใหม่: เลือก 3 ช่อง/วัน แล้วทำตามแผน
+# ============================================================
+
+func plan_slot_data(slot_id: String) -> Dictionary:
+	for s in PLAN_SLOTS:
+		if String(s["id"]) == slot_id:
+			return s
+	return {}
+
+
+func plan_current_slot_id() -> String:
+	var t := time_min
+	for s in PLAN_SLOTS:
+		if t >= int(s["start"]) and t < int(s["end"]):
+			return String(s["id"])
+	return "evening"
+
+
+func plan_slot_name(slot_id: String) -> String:
+	var s := plan_slot_data(slot_id)
+	return String(s.get("name", slot_id))
+
+
+func plan_option_ids() -> Array:
+	return PLAN_CHILD_OPTIONS.duplicate() if is_child() else PLAN_ADULT_OPTIONS.duplicate()
+
+
+func plan_option_label(opt_id: String) -> String:
+	var def: Dictionary = PLAN_OPTIONS.get(opt_id, {})
+	return String(def.get("label", opt_id))
+
+
+func plan_option_hint(opt_id: String) -> String:
+	var def: Dictionary = PLAN_OPTIONS.get(opt_id, {})
+	return String(def.get("hint", ""))
+
+
+## เหตุผลที่ยังเลือกตัวเลือกนี้ไม่ได้ ("" = เลือกได้)
+func plan_block_reason(slot_id: String, opt_id: String) -> String:
+	var slot := plan_slot_data(slot_id)
+	if slot.is_empty():
+		return "ไม่รู้จักช่วงเวลา"
+	if time_min >= int(slot["end"]):
+		return "ช่วงนี้ผ่านไปแล้ว"
+	if plan_state.has(slot_id):
+		return "ช่วงนี้จบแล้ว"
+	match opt_id:
+		"work":
+			if is_child():
+				return "ยังไม่ถึงวัยทำงาน"
+			if retired:
+				return "เกษียณแล้ว"
+			if sick:
+				return "ป่วยอยู่ ต้องพัก"
+			if not is_workday():
+				return "วันหยุด"
+			if worked_today:
+				return "วันนี้ทำงานแล้ว"
+		"school":
+			if not is_child():
+				return "ไม่ใช่นักเรียนแล้ว"
+			if not is_school_day():
+				return "โรงเรียนปิด"
+			if school_attended_today:
+				return "วันนี้เรียนแล้ว"
+		"exercise":
+			if age < 10:
+				return "อายุ 10 ปีขึ้นไป"
+		"study":
+			if age < 6:
+				return "ยังเล็กเกินไป"
+	return ""
+
+
+func plan_status(slot_id: String) -> String:
+	return String(plan_state.get(slot_id, ""))
+
+
+## เลือกกิจกรรมให้ช่องเวลา (opt_id = "" คือปล่อยว่าง)
+func set_plan(slot_id: String, opt_id: String) -> Dictionary:
+	if not alive:
+		return {"ok": false, "message": "เกมจบแล้ว"}
+	if not created:
+		return {"ok": false, "message": "ยังไม่ได้เริ่มชีวิต"}
+	if plan_slot_data(slot_id).is_empty():
+		return {"ok": false, "message": "ไม่รู้จักช่วงเวลา"}
+	if opt_id != "" and not PLAN_OPTIONS.has(opt_id):
+		return {"ok": false, "message": "ไม่รู้จักกิจกรรม"}
+	var blocked := plan_block_reason(slot_id, opt_id)
+	if blocked != "":
+		return {"ok": false, "message": blocked}
+	if opt_id == "":
+		day_plan.erase(slot_id)
+	else:
+		day_plan[slot_id] = opt_id
+	last_message = ("วางแผน%s: %s" % [plan_slot_name(slot_id), plan_option_label(opt_id)]) if opt_id != "" else ("ปล่อย%sว่าง" % plan_slot_name(slot_id))
+	save_game()
+	changed.emit()
+	return {"ok": true, "message": last_message}
+
+
+## เรียกเมื่อผู้เล่นทำกิจกรรมนั้นจริง — สำเร็จแผนของช่องปัจจุบัน (หรือช่องถัดไป)
+func _plan_mark(tag: String) -> void:
+	if tag == "" or not created:
+		return
+	var order: Array[String] = []
+	for s in PLAN_SLOTS:
+		order.append(String(s["id"]))
+	var cur := plan_current_slot_id()
+	var start_idx := order.find(cur)
+	if start_idx < 0:
+		start_idx = 0
+	for step in range(0, 2):
+		var idx := (start_idx + step) % order.size()
+		var sid := order[idx]
+		if plan_state.has(sid):
+			continue
+		var opt := String(day_plan.get(sid, ""))
+		if opt == "":
+			continue
+		var def: Dictionary = PLAN_OPTIONS.get(opt, {})
+		var tags: Array = def.get("tags", [opt])
+		if not tags.has(tag):
+			continue
+		plan_state[sid] = "done"
+		plan_total_done += 1
+		happy = clampi(happy + PLAN_DONE_HAPPY, 0, 100)
+		stress = clampi(stress - PLAN_DONE_STRESS, 0, 100)
+		money += PLAN_DONE_MONEY
+		var msg := "✅ ตามแผน%s: %s • +฿%d" % [plan_slot_name(sid), plan_option_label(opt), PLAN_DONE_MONEY]
+		log_event(msg)
+		plan_result.emit(msg)
+		return
+
+
+func _resolve_slot(slot_id: String, notes: Array[String] = []) -> void:
+	if plan_state.has(slot_id):
+		return
+	var opt := String(day_plan.get(slot_id, ""))
+	if opt == "":
+		return
+	plan_state[slot_id] = "miss"
+	plan_total_miss += 1
+	stress = clampi(stress + PLAN_MISS_STRESS, 0, 100)
+	happy = clampi(happy - PLAN_MISS_HAPPY, 0, 100)
+	money = maxi(money - PLAN_MISS_MONEY, 0)
+	if opt == "work" and job_id != "" and is_workday():
+		performance = clampi(performance - 4, 0, 100)
+	if opt == "school":
+		grades = clampi(grades - 2, 0, 100)
+	var msg := "❌ ผิดแผน%s: %s" % [plan_slot_name(slot_id), plan_option_label(opt)]
+	notes.append(msg)
+	log_event(msg)
+	plan_result.emit(msg)
+
+
+func _resolve_passed_slots(notes: Array[String] = []) -> void:
+	for s in PLAN_SLOTS:
+		if time_min >= int(s["end"]):
+			_resolve_slot(String(s["id"]), notes)
+
+
+## สรุปแผนทั้งวัน + โบนัสเมื่อทำครบ
+func _finish_day_plan(notes: Array[String]) -> void:
+	for s in PLAN_SLOTS:
+		_resolve_slot(String(s["id"]), notes)
+	var planned := 0
+	var done := 0
+	for s in PLAN_SLOTS:
+		var sid := String(s["id"])
+		if String(day_plan.get(sid, "")) != "":
+			planned += 1
+			if plan_status(sid) == "done":
+				done += 1
+	if planned >= 3 and done >= 3:
+		plan_streak += 1
+		plan_best_streak = maxi(plan_best_streak, plan_streak)
+		money += PLAN_ALL_BONUS
+		fame = clampi(fame + PLAN_ALL_FAME, 0, 100)
+		notes.append("⭐ ทำครบทุกช่อง! +฿%d • ต่อเนื่อง %d วัน" % [PLAN_ALL_BONUS, plan_streak])
+		log_event("ทำแผนครบ 3 ช่อง ต่อเนื่อง %d วัน" % plan_streak)
+		plan_result.emit("⭐ ครบ 3 ช่อง! +฿%d" % PLAN_ALL_BONUS)
+	else:
+		plan_streak = 0
+		if planned > 0:
+			notes.append("📋 แผนวันนี้สำเร็จ %d/%d ช่อง" % [done, planned])
+
+
+func _roll_daily_event() -> void:
+	pending_event = {}
+	if not alive:
+		return
+	var chance := DAILY_EVENT_CHANCE
+	if is_child():
+		chance = 0.18
+	if randf() >= chance:
+		return
+	var picked := LifeEvents.pick(self)
+	if picked.is_empty():
+		return
+	pending_event = picked
+	event_day = day
+	log_event("เหตุการณ์: %s" % String(picked.get("text", "")))
+
+
+## รายการ "ควรทำอะไรต่อ" — ใช้ในแท็บวันนี้
+func next_steps() -> Array:
+	var out: Array = []
+	if not alive:
+		return out
+	if not pending_event.is_empty():
+		out.append({"text": "มีเหตุการณ์รอตัดสินใจ", "tab": "today"})
+	var open_slots := 0
+	for s in PLAN_SLOTS:
+		var sid := String(s["id"])
+		if time_min < int(s["end"]) and not plan_state.has(sid):
+			open_slots += 1
+	if open_slots > 0:
+		out.append({"text": "วางแผนวันนี้ (เหลือ %d ช่อง)" % open_slots, "tab": "today"})
+	if hunger < 30:
+		out.append({"text": "ความอิ่มต่ำ — หาอะไรกิน", "tab": "home"})
+	if energy < 25:
+		out.append({"text": "พลังงานใกล้หมด — พักผ่อนหรือนอน", "tab": "home"})
+	if stress > 80:
+		out.append({"text": "เครียดมาก — ผ่อนคลายก่อนป่วย", "tab": "home"})
+	if not is_child() and job_id != "" and is_workday() and not worked_today and not sick:
+		if time_min < WORK_END:
+			out.append({"text": "ยังไม่ได้เข้างาน (ก่อน 17:00)", "tab": "work"})
+	if is_school_day() and not school_attended_today and time_min < SCHOOL_END:
+		out.append({"text": "ยังไม่ได้ไปโรงเรียน (ก่อน 15:00)", "tab": "today"})
+	if farm_ready_count() > 0:
+		out.append({"text": "มีพืชพร้อมเก็บ %d แปลง" % farm_ready_count(), "tab": "home"})
+	var days_to_bills := 28 - ((day - 1) % 28)
+	if days_to_bills <= 3 and money < living_cost():
+		out.append({"text": "บิลใกล้ถึง (อีก %d วัน) แต่เงินไม่พอ" % days_to_bills, "tab": "work"})
+	if out.is_empty():
+		out.append({"text": "ทำตามแผนของวันให้ครบ", "tab": "today"})
+	return out.slice(0, 4)
 
 
 func _birthday_check(notes: Array[String]) -> void:
@@ -945,6 +1239,15 @@ func new_game() -> void:
 	tax_paid = 0
 	life_log = []
 	pending_event = {}
+	# v10
+	day_plan = {}
+	plan_state = {}
+	plan_streak = 0
+	plan_best_streak = 0
+	plan_total_done = 0
+	plan_total_miss = 0
+	event_day = -1
+	burnout = false
 	# v4
 	time_min = DAY_START_MIN
 	day = 1
@@ -2464,6 +2767,7 @@ func attend_school(score: int) -> Dictionary:
 	var blocked := school_block_reason()
 	if blocked != "":
 		return {"ok": false, "message": blocked}
+	_plan_mark("school")
 	score = clampi(score, 0, 100)
 	var notes: Array[String] = []
 	var gain := 1 + int(score / 22.0)
@@ -2503,6 +2807,7 @@ func study_lecture(score: int) -> Dictionary:
 	if money < COST_STUDY:
 		return {"ok": false, "message": "เงินไม่พอค่าเล่าเรียน ฿%s" % fmt_money(COST_STUDY)}
 	money -= COST_STUDY
+	_plan_mark("study")
 	score = clampi(score, 0, 100)
 	var before := education_level()
 	var gain := 3 + int(score / 20.0)
@@ -2527,6 +2832,7 @@ func study_lecture(score: int) -> Dictionary:
 func do_homework() -> Dictionary:
 	if not is_child():
 		return {"ok": false, "message": "ไม่มีการบ้านแล้ว"}
+	_plan_mark("study")
 	edu = clampi(edu + 1, 0, 29)
 	grades = clampi(grades + 1, 0, 100)
 	add_skill("academics", 2)
@@ -2642,6 +2948,7 @@ func work_shift(score: int) -> Dictionary:
 	var blocked := work_block_reason()
 	if blocked != "":
 		return {"ok": false, "message": blocked}
+	_plan_mark("work")
 	score = clampi(score, 0, 100)
 	var notes: Array[String] = []
 	var pay := 0
@@ -2705,6 +3012,7 @@ func gym_session(score: int) -> Dictionary:
 	if money < COST_GYM:
 		return {"ok": false, "message": "เงินไม่พอค่าเข้า gym ฿%s" % fmt_money(COST_GYM)}
 	money -= COST_GYM
+	_plan_mark("exercise")
 	score = clampi(score, 0, 100)
 	var fit_gain := 2 + int(score / 22.0)
 	fitness = clampi(fitness + fit_gain, 0, 100)
@@ -2728,6 +3036,7 @@ func park_run(laps: int) -> Dictionary:
 		return {"ok": false, "message": "เกมจบแล้ว"}
 	if laps < 3:
 		return {"ok": false, "message": "ต้องวิ่งให้ครบ 3 รอบก่อน"}
+	_plan_mark("exercise")
 	var fit_gain := 1 + laps
 	fitness = clampi(fitness + fit_gain, 0, 100)
 	add_skill("athletics", 1)
@@ -2777,6 +3086,7 @@ func family_dinner() -> Dictionary:
 	if dinner_day == day:
 		return {"ok": false, "message": "วันนี้กินข้าวกับครอบครัวแล้ว"}
 	dinner_day = day
+	_plan_mark("social")
 	hunger = clampi(hunger + 30, 0, 100)
 	happy = clampi(happy + 6, 0, 100)
 	parent_love = clampi(parent_love + 3, 0, 100)
@@ -2841,6 +3151,7 @@ func npc_talk(npc: Dictionary) -> Dictionary:
 	if npc_talked.has(key):
 		return {"ok": false, "message": "วันนี้คุยกับ%sแล้ว" % String(npc.get("name", "เขา"))}
 	npc_talked[key] = true
+	_plan_mark("social")
 	_quest_bump("talk")
 	var gain := 4
 	if String(npc.get("zone", "")) == zone_id:
@@ -2874,6 +3185,7 @@ func npc_gift(npc: Dictionary) -> Dictionary:
 	if npc_gifted.has(key):
 		return {"ok": false, "message": "วันนี้ให้ของขวัญ%sแล้ว" % String(npc.get("name", "เขา"))}
 	npc_gifted[key] = true
+	_plan_mark("social")
 	money -= COST_GIFT
 	npc_friendship[npc_id] = clampi(friendship_of(npc_id) + 12, 0, 100)
 	add_skill("communication", 1)
@@ -2902,6 +3214,7 @@ func npc_date(npc: Dictionary) -> Dictionary:
 	if partner_name != "" and partner_name != String(npc.get("name", "")):
 		return {"ok": false, "message": "มีคนรักอยู่แล้ว (%s)" % partner_name}
 	money -= COST_DATE_NPC
+	_plan_mark("social")
 	var chance := 0.35 + float(friendship_of(npc_id)) / 200.0 + float(social) / 400.0
 	var notes: Array[String] = []
 	if partner_name == "":
@@ -2967,6 +3280,7 @@ func eat_food(price: int, hunger_gain: int, happy_gain: int, minutes: int, label
 func watch_tv() -> Dictionary:
 	if not alive:
 		return {"ok": false, "message": "เกมจบแล้ว"}
+	_plan_mark("rest")
 	stress = clampi(stress - 7, 0, 100)
 	happy = clampi(happy + 3, 0, 100)
 	energy = clampi(energy + 2, 0, 100)
@@ -2986,6 +3300,7 @@ func rest_bench() -> Dictionary:
 	if bench_day == day:
 		return {"ok": false, "message": "วันนี้นั่งพักม้านั่งแล้ว — เดินเล่นต่อดีกว่า"}
 	bench_day = day
+	_plan_mark("rest")
 	stress = clampi(stress - 9, 0, 100)
 	happy = clampi(happy + 3, 0, 100)
 	energy = clampi(energy + 8, 0, 100)
@@ -3632,6 +3947,7 @@ func farm_plant(index: int, crop_id: String) -> Dictionary:
 	if money < price:
 		return {"ok": false, "message": "เงินไม่พอซื้อเมล็ด (ต้อง ฿%s)" % fmt_money(price)}
 	money -= price
+	_plan_mark("farm")
 	farm_plots[index] = {"crop": crop_id, "growth": 0, "watered": false}
 	add_skill("cooking", 1)
 	add_skill("craft", 1)
@@ -3653,6 +3969,7 @@ func farm_water(index: int) -> Dictionary:
 		return {"ok": false, "message": "วันนี้รดน้ำแปลงนี้แล้ว"}
 	p["watered"] = true
 	farm_plots[index] = p
+	_plan_mark("farm")
 	advance_minutes(10)
 	_finish(["💧 รดน้ำแปลง %d แล้ว" % (index + 1)])
 	return {"ok": true, "message": last_message}
@@ -4831,6 +5148,11 @@ func save_game() -> void:
 		"quests": quests, "quest_counts": quest_counts,
 		"quest_total_done": quest_total_done,
 		"quest_certificates": quest_certificates,
+		# ---------- v10 ----------
+		"day_plan": day_plan, "plan_state": plan_state,
+		"plan_streak": plan_streak, "plan_best_streak": plan_best_streak,
+		"plan_total_done": plan_total_done, "plan_total_miss": plan_total_miss,
+		"pending_event": pending_event, "event_day": event_day,
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file:
@@ -5050,6 +5372,22 @@ func load_game() -> void:
 	family_outing_week = int(parsed.get("family_outing_week", -1))
 	booth_day = int(parsed.get("booth_day", -1))
 	booth_plays = int(parsed.get("booth_plays", 0))
+	# ---------- v10 ----------
+	var valid_slots := ["morning", "afternoon", "evening"]
+	day_plan = _dict_from(parsed.get("day_plan", {}))
+	for k in day_plan.keys():
+		if not valid_slots.has(String(k)) or not PLAN_OPTIONS.has(String(day_plan[k])):
+			day_plan.erase(k)
+	plan_state = _dict_from(parsed.get("plan_state", {}))
+	for k in plan_state.keys():
+		if not valid_slots.has(String(k)):
+			plan_state.erase(k)
+	plan_streak = int(parsed.get("plan_streak", 0))
+	plan_best_streak = int(parsed.get("plan_best_streak", plan_streak))
+	plan_total_done = int(parsed.get("plan_total_done", 0))
+	plan_total_miss = int(parsed.get("plan_total_miss", 0))
+	pending_event = _dict_from(parsed.get("pending_event", {}))
+	event_day = int(parsed.get("event_day", -1))
 	# ---------- v8 ----------
 	life_goal = String(parsed.get("life_goal", "family"))
 	if not life_goal_exists(life_goal):

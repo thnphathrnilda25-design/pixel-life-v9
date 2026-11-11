@@ -267,6 +267,47 @@ func _ready() -> void:
 	await _shot("gameover.png")
 	town.hud.close_all()
 
+	# ---------- HUD v10: แผนวัน + กลุ่มแท็บ ----------
+	Game.new_game()
+	Game.created = true
+	Game.player_name = "นุ่น"
+	Game.age = 24
+	Game.money = 4200
+	Game.health = 78
+	Game.happy = 64
+	Game.energy = 52
+	Game.hunger = 41
+	Game.stress = 66
+	Game.time_min = 9 * 60 + 20
+	Game.job_id = "account"
+	Game.day_plan = {"morning": "work", "afternoon": "farm"}
+	Game.plan_state = {"evening": "done"}
+	Game.plan_streak = 3
+	Game.plan_best_streak = 4
+	Game.plan_total_done = 11
+	Game.plan_total_miss = 2
+	Game.pending_event = {
+		"id": "hud_demo",
+		"text": "เพื่อนร่วมงานชวนลงทุนร้านเล็ก ๆ ด้วยกัน ต้องใช้เงินก้อนหนึ่ง",
+		"options": [
+			{"label": "ลงทุนด้วย", "cost": 1500, "effects": {"money": 0}},
+			{"label": "ขอคิดดูก่อน", "cost": 0, "effects": {"stress": 3}},
+		],
+	}
+	Game.time_paused = true
+	town.hud.open_summary("today")
+	await _wait(12)
+	await _shot("hud_today.png")
+	town.hud.close_all()
+	town.hud.open_summary("character")
+	await _wait(12)
+	await _shot("hud_character.png")
+	town.hud.close_all()
+	town.hud.open_summary("life")
+	await _wait(12)
+	await _shot("hud_life.png")
+	town.hud.close_all()
+
 	Game.new_game()
 	town.hud.show_creation()
 	await _wait(10)
