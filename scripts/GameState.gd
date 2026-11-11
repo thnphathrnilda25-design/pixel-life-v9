@@ -943,6 +943,8 @@ func plan_block_reason(slot_id: String, opt_id: String) -> String:
 				return "วันหยุด"
 			if worked_today:
 				return "วันนี้ทำงานแล้ว"
+			if int(slot["start"]) >= WORK_END:
+				return "เลยเวลางานแล้ว (ก่อน 17:00)"
 		"school":
 			if not is_child():
 				return "ไม่ใช่นักเรียนแล้ว"
@@ -950,6 +952,8 @@ func plan_block_reason(slot_id: String, opt_id: String) -> String:
 				return "โรงเรียนปิด"
 			if school_attended_today:
 				return "วันนี้เรียนแล้ว"
+			if int(slot["start"]) >= SCHOOL_END:
+				return "เลยเวลาเรียนแล้ว (ก่อน 15:00)"
 		"exercise":
 			if age < 10:
 				return "อายุ 10 ปีขึ้นไป"
@@ -1112,9 +1116,9 @@ func next_steps() -> Array:
 		out.append({"text": "เครียดมาก — ผ่อนคลายก่อนป่วย", "tab": "home"})
 	if not is_child() and job_id != "" and is_workday() and not worked_today and not sick:
 		if time_min < WORK_END:
-			out.append({"text": "ยังไม่ได้เข้างาน (ก่อน 17:00)", "tab": "work"})
+			out.append({"text": "ยังไม่ได้เข้างาน — ไปที่%s ก่อน 17:00" % TownData.zone_name(current_workplace()), "tab": "work"})
 	if is_school_day() and not school_attended_today and time_min < SCHOOL_END:
-		out.append({"text": "ยังไม่ได้ไปโรงเรียน (ก่อน 15:00)", "tab": "today"})
+		out.append({"text": "ยังไม่ได้ไปโรงเรียน — ไปที่เขตโรงเรียนก่อน 15:00", "tab": "today"})
 	if farm_ready_count() > 0:
 		out.append({"text": "มีพืชพร้อมเก็บ %d แปลง" % farm_ready_count(), "tab": "home"})
 	var days_to_bills := 28 - ((day - 1) % 28)
