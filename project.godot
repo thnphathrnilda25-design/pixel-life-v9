@@ -1,0 +1,31 @@
+; Engine configuration file.
+; เปิดโปรเจกต์นี้ด้วย Godot 4.7 ขึ้นไป
+
+config_version=5
+
+[application]
+
+config/name="Pixel Life"
+run/main_scene="res://scenes/Town.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+
+[autoload]
+
+Game="*res://scripts/GameState.gd"
+Fonts="*res://scripts/Fonts.gd"
+
+[display]
+
+window/size/viewport_width=960
+window/size/viewport_height=540
+window/size/window_width_override=960
+window/size/window_height_override=540
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+window/handheld/orientation=0
+
+[rendering]
+
+textures/canvas_textures/default_texture_filter=0
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
