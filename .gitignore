@@ -1,10 +1,8 @@
-# Godot cache (สร้างใหม่ได้เอง)
-.godot/
+# Local/editor files
+.DS_Store
+Thumbs.db
+node_modules/
 
-# ไฟล์ชั่วคราว
+# Temporary and generated files
 *.tmp
 *.log
-
-# ภาพทดสอบจากการตรวจเว็บในเครื่อง (ไม่ใช่ไฟล์เกม)
-/build/web_*.png*
-/docs/web_*.png*

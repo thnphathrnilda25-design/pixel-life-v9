@@ -1,220 +1,169 @@
 <!DOCTYPE html>
-<html lang="en">
-	<head>
-		<meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
-		<title>Pixel Life</title>
-		<style>
-html, body, #canvas {
-	margin: 0;
-	padding: 0;
-	border: 0;
-}
+<html lang="th">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Pixel Life — ชีวิตพิกเซล</title>
+<meta name="description" content="เกมจำลองชีวิตพิกเซล เล่นได้ในเบราว์เซอร์ เดินสำรวจเมือง วางแผนวัน ทำงาน ปลูกผัก และสร้างครอบครัว" />
+  <link rel="stylesheet" href="css/style.css?v=19" />
+</head>
+<body>
+<div id="app">
 
-body {
-	color: white;
-	background-color: black;
-	overflow: hidden;
-	touch-action: none;
-}
+  <!-- ===== ฉากเกม ===== -->
+  <div id="stage">
+    <canvas id="game" aria-label="โลกเกม"></canvas>
 
-#canvas {
-	display: block;
-}
+    <!-- แถบบน -->
+    <header id="topbar">
+      <div class="tb-zone">
+        <strong id="zone-name">บ้านของเรา</strong>
+        <span id="date-line">จันทร์ • ฤดูใบไม้ผลิ 1 • 06:00</span>
+      </div>
+      <div class="tb-mid">
+        <span id="weather-line">แดดออก</span>
+        <span id="plan-chip" class="chip">แผน -</span>
+        <span id="age-line">อายุ 6</span>
+      </div>
+      <div class="tb-right">
+        <span id="money-line">฿500</span>
+        <button id="btn-summary" class="btn btn-brown" title="เปิดสมุดชีวิต (M)">สมุดชีวิต</button>
+      </div>
+    </header>
 
-#canvas:focus {
-	outline: none;
-}
+    <!-- แถบสถานะ -->
+    <div id="needs" aria-label="ค่าสถานะ">
+      <div class="need" data-k="health"><span>สุขภาพ</span><div class="bar"><i></i></div><b>85</b></div>
+      <div class="need" data-k="happy"><span>ความสุข</span><div class="bar"><i></i></div><b>75</b></div>
+      <div class="need" data-k="energy"><span>พลังงาน</span><div class="bar"><i></i></div><b>90</b></div>
+      <div class="need" data-k="hunger"><span>ความอิ่ม</span><div class="bar"><i></i></div><b>80</b></div>
+      <div class="need" data-k="stress"><span>เครียด</span><div class="bar"><i></i></div><b>10</b></div>
+    </div>
 
-#status, #status-splash, #status-progress {
-	position: absolute;
-	left: 0;
-	right: 0;
-}
+    <!-- คำใบ้บริบท -->
+    <div id="prompt" class="hidden"><kbd>E</kbd><span></span></div>
 
-#status, #status-splash {
-	top: 0;
-	bottom: 0;
-}
+    <!-- ปุ่มลอย -->
+    <div id="dock">
+      <button id="btn-act" class="btn btn-gold" disabled>ใช้ <kbd>E</kbd></button>
+      <button id="btn-list" class="btn btn-brown">ทำอะไรได้บ้าง</button>
+      <button id="btn-sleep" class="btn btn-brown">จบวัน</button>
+    </div>
 
-#status {
-	background-color: #242424;
-	display: flex;
-	flex-direction: column;
-	justify-content: center;
-	align-items: center;
-	visibility: hidden;
-}
+    <!-- ปุ่มเดิน (มือถือ) -->
+    <div id="dpad" aria-hidden="true">
+      <button data-dir="up">▲</button>
+      <button data-dir="left">◀</button>
+      <button data-dir="right">▶</button>
+      <button data-dir="down">▼</button>
+    </div>
 
-#status-splash {
-	max-height: 100%;
-	max-width: 100%;
-	margin: auto;
-}
+    <div id="toast" class="hidden"></div>
 
-#status-splash.show-image--false {
-	display: none;
-}
+    <!-- แถบโหมดจัดบ้าน -->
+    <div id="decor-bar" class="hidden">
+      <span class="decor-label">🛋 โหมดจัดบ้าน — ลากเฟอร์นิเจอร์ในห้อง</span>
+      <button id="decor-rotate" class="btn btn-brown sm">หมุน</button>
+      <button id="decor-clear" class="btn btn-brown sm">เก็บ</button>
+      <button id="decor-done" class="btn btn-gold sm">เสร็จ</button>
+    </div>
 
-#status-splash.fullsize--true {
-	height: 100%;
-	width: 100%;
-	object-fit: contain;
-}
+    <div id="hint">เดินด้วย WASD / ลูกศร หรือคลิกในฉาก • กด E เพื่อใช้ของ</div>
+  </div>
 
-#status-splash.use-filter--false {
-	image-rendering: pixelated;
-}
+  <!-- ===== หน้าต่าง/แผง ===== -->
+  <div id="modal-wrap" class="hidden" role="dialog" aria-modal="true">
+    <div id="modal">
+      <div id="modal-head">
+        <h2 id="modal-title">สมุดชีวิต</h2>
+        <button id="modal-close" class="x" aria-label="ปิด">✕</button>
+      </div>
+      <div id="modal-tabs"></div>
+      <div id="modal-body"></div>
+      <div id="modal-foot"></div>
+    </div>
+  </div>
 
-#status-progress, #status-notice {
-	display: none;
-}
+  <!-- ===== หน้าเริ่มเกม ===== -->
+  <div id="start-screen">
+    <div class="start-card">
+      <div class="start-hero">
+        <div class="logo">PIXEL<span>LIFE</span></div>
+        <p class="tag">ชีวิตเล็ก ๆ ในเมืองใหญ่ — เล่นได้ในเบราว์เซอร์ ไม่ต้องโหลดเกมหนัก</p>
+        <div id="start-buttons">
+          <button id="btn-continue" class="btn btn-gold big hidden">เล่นต่อจากเซฟ</button>
+          <button id="btn-new" class="btn btn-gold big">เริ่มชีวิตใหม่</button>
+          <button id="btn-howto" class="btn btn-ghost">วิธีเล่น</button>
+        </div>
+        <div id="howto" class="hidden">
+          <h3>เล่นอย่างไร</h3>
+          <ol>
+            <li><b>วางแผนวัน</b> — ทุกเช้าเลือกกิจกรรม 3 ช่วง (เช้า/บ่าย/เย็น) ทำตามแผนได้โบนัส ผิดแผนมีบทลงโทษ</li>
+            <li><b>เดินสำรวจ</b> — ใช้ WASD/ลูกศร/คลิก หรือปุ่มลูกศรบนจอ เดินเข้าใกล้ของแล้วกด <kbd>E</kbd></li>
+            <li><b>รักษาชีวิต</b> — กินข้าว พักผ่อน ลดเครียด ทำงานหาเงิน จ่ายบิลทุก 28 วัน</li>
+            <li><b>สร้างอนาคต</b> — เรียน เก็บทักษะ สะสมของ เปิดร้าน มีครอบครัว</li>
+          </ol>
+          <p class="dim">ทุกอย่างบันทึกอัตโนมัติในเบราว์เซอร์</p>
+        </div>
+      </div>
+    </div>
+  </div>
 
-#status-progress {
-	bottom: 10%;
-	width: 50%;
-	margin: 0 auto;
-}
+  <!-- ===== สร้างตัวละคร ===== -->
+  <div id="create-screen" class="hidden">
+    <div class="create-card">
+      <h2>สร้างชีวิตใหม่</h2>
+      <p class="dim">เริ่มตอนอายุ 6 ขวบ — พ่อแม่ กรรมพัน และเป้าหมายชีวิตจะหล่อหลอมเส้นทางของคุณ</p>
+      <div class="create-grid">
+        <label>ชื่อ<input id="c-name" maxlength="16" value="นุ่น" /></label>
+        <label>เพศ
+          <select id="c-gender"><option>หญิง</option><option>ชาย</option></select>
+        </label>
+        <label>ฐานะครอบครัว
+          <select id="c-wealth">
+            <option value="0">พออยู่พอกิน (เริ่ม ฿800)</option>
+            <option value="1" selected>ปานกลาง (เริ่ม ฿2,000)</option>
+            <option value="2">รวย (เริ่ม ฿6,500)</option>
+          </select>
+        </label>
+        <label>พ่อแม่ / กรรมพัน
+          <select id="c-trait"></select>
+        </label>
+        <label>เป้าหมายชีวิต
+          <select id="c-goal"></select>
+        </label>
+        <label>ผ้าห่อตัว
+          <select id="c-outfit"></select>
+        </label>
+        <label>สีผิว
+          <select id="c-skin"></select>
+        </label>
+        <label>สีผม
+          <select id="c-hair"></select>
+        </label>
+        <label>ทรงผม
+          <select id="c-style"></select>
+        </label>
+        <label>เครื่องประดับ
+          <select id="c-accessory"></select>
+        </label>
+      </div>
+      <div class="create-preview">
+        <canvas id="preview" width="120" height="150"></canvas>
+        <div id="trait-desc" class="dim"></div>
+      </div>
+      <div class="create-buttons">
+        <button id="btn-create-back" class="btn btn-ghost">ย้อนกลับ</button>
+        <button id="btn-create-go" class="btn btn-gold big">เริ่มชีวิต</button>
+      </div>
+    </div>
+  </div>
 
-#status-notice {
-	background-color: #5b3943;
-	border-radius: 0.5rem;
-	border: 1px solid #9b3943;
-	color: #e0e0e0;
-	font-family: 'Noto Sans', 'Droid Sans', Arial, sans-serif;
-	line-height: 1.3;
-	margin: 0 2rem;
-	overflow: hidden;
-	padding: 1rem;
-	text-align: center;
-	z-index: 1;
-}
-		</style>
-		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
-<link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
-
-	</head>
-	<body>
-		<canvas id="canvas">
-			Your browser does not support the canvas tag.
-		</canvas>
-
-		<noscript>
-			Your browser does not support JavaScript.
-		</noscript>
-
-		<div id="status">
-			<img id="status-splash" class="show-image--true fullsize--true use-filter--true" src="index.png" alt="">
-			<progress id="status-progress"></progress>
-			<div id="status-notice"></div>
-		</div>
-
-		<script src="index.js"></script>
-		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":805408,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
-const GODOT_THREADS_ENABLED = false;
-const engine = new Engine(GODOT_CONFIG);
-
-(function () {
-	const statusOverlay = document.getElementById('status');
-	const statusProgress = document.getElementById('status-progress');
-	const statusNotice = document.getElementById('status-notice');
-
-	let initializing = true;
-	let statusMode = '';
-
-	function setStatusMode(mode) {
-		if (statusMode === mode || !initializing) {
-			return;
-		}
-		if (mode === 'hidden') {
-			statusOverlay.remove();
-			initializing = false;
-			return;
-		}
-		statusOverlay.style.visibility = 'visible';
-		statusProgress.style.display = mode === 'progress' ? 'block' : 'none';
-		statusNotice.style.display = mode === 'notice' ? 'block' : 'none';
-		statusMode = mode;
-	}
-
-	function setStatusNotice(text) {
-		while (statusNotice.lastChild) {
-			statusNotice.removeChild(statusNotice.lastChild);
-		}
-		const lines = text.split('\n');
-		lines.forEach((line) => {
-			statusNotice.appendChild(document.createTextNode(line));
-			statusNotice.appendChild(document.createElement('br'));
-		});
-	}
-
-	function displayFailureNotice(err) {
-		console.error(err);
-		if (err instanceof Error) {
-			setStatusNotice(err.message);
-		} else if (typeof err === 'string') {
-			setStatusNotice(err);
-		} else {
-			setStatusNotice('An unknown error occurred.');
-		}
-		setStatusMode('notice');
-		initializing = false;
-	}
-
-	const missing = Engine.getMissingFeatures({
-		threads: GODOT_THREADS_ENABLED,
-	});
-
-	if (missing.length !== 0) {
-		if (GODOT_CONFIG['serviceWorker'] && GODOT_CONFIG['ensureCrossOriginIsolationHeaders'] && 'serviceWorker' in navigator) {
-			let serviceWorkerRegistrationPromise;
-			try {
-				serviceWorkerRegistrationPromise = navigator.serviceWorker.getRegistration();
-			} catch (err) {
-				serviceWorkerRegistrationPromise = Promise.reject(new Error('Service worker registration failed.'));
-			}
-			// There's a chance that installing the service worker would fix the issue
-			Promise.race([
-				serviceWorkerRegistrationPromise.then((registration) => {
-					if (registration != null) {
-						return Promise.reject(new Error('Service worker already exists.'));
-					}
-					return registration;
-				}).then(() => engine.installServiceWorker()),
-				// For some reason, `getRegistration()` can stall
-				new Promise((resolve) => {
-					setTimeout(() => resolve(), 2000);
-				}),
-			]).then(() => {
-				// Reload if there was no error.
-				window.location.reload();
-			}).catch((err) => {
-				console.error('Error while registering service worker:', err);
-			});
-		} else {
-			// Display the message as usual
-			const missingMsg = 'Error\nThe following features required to run Godot projects on the Web are missing:\n';
-			displayFailureNotice(missingMsg + missing.join('\n'));
-		}
-	} else {
-		setStatusMode('progress');
-		engine.startGame({
-			'onProgress': function (current, total) {
-				if (current > 0 && total > 0) {
-					statusProgress.value = current;
-					statusProgress.max = total;
-				} else {
-					statusProgress.removeAttribute('value');
-					statusProgress.removeAttribute('max');
-				}
-			},
-		}).then(() => {
-			setStatusMode('hidden');
-		}, displayFailureNotice);
-	}
-}());
-		</script>
-	</body>
+</div>
+<script src="js/data.js?v=19"></script>
+<script src="js/state.js?v=19"></script>
+<script src="js/render.js?v=19"></script>
+<script src="js/ui.js?v=19"></script>
+<script src="js/main.js?v=19"></script>
+</body>
 </html>
-

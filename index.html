@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Pixel Life — ชีวิตพิกเซล</title>
+<meta name="description" content="เกมจำลองชีวิตพิกเซล เล่นได้ในเบราว์เซอร์ เดินสำรวจเมือง วางแผนวัน ทำงาน ปลูกผัก และสร้างครอบครัว" />
+  <link rel="stylesheet" href="css/style.css?v=19" />
+</head>
+<body>
+<div id="app">
+
+  <!-- ===== ฉากเกม ===== -->
+  <div id="stage">
+    <canvas id="game" aria-label="โลกเกม"></canvas>
+
+    <!-- แถบบน -->
+    <header id="topbar">
+      <div class="tb-zone">
+        <strong id="zone-name">บ้านของเรา</strong>
+        <span id="date-line">จันทร์ • ฤดูใบไม้ผลิ 1 • 06:00</span>
+      </div>
+      <div class="tb-mid">
+        <span id="weather-line">แดดออก</span>
+        <span id="plan-chip" class="chip">แผน -</span>
+        <span id="age-line">อายุ 6</span>
+      </div>
+      <div class="tb-right">
+        <span id="money-line">฿500</span>
+        <button id="btn-summary" class="btn btn-brown" title="เปิดสมุดชีวิต (M)">สมุดชีวิต</button>
+      </div>
+    </header>
+
+    <!-- แถบสถานะ -->
+    <div id="needs" aria-label="ค่าสถานะ">
+      <div class="need" data-k="health"><span>สุขภาพ</span><div class="bar"><i></i></div><b>85</b></div>
+      <div class="need" data-k="happy"><span>ความสุข</span><div class="bar"><i></i></div><b>75</b></div>
+      <div class="need" data-k="energy"><span>พลังงาน</span><div class="bar"><i></i></div><b>90</b></div>
+      <div class="need" data-k="hunger"><span>ความอิ่ม</span><div class="bar"><i></i></div><b>80</b></div>
+      <div class="need" data-k="stress"><span>เครียด</span><div class="bar"><i></i></div><b>10</b></div>
+    </div>
+
+    <!-- คำใบ้บริบท -->
+    <div id="prompt" class="hidden"><kbd>E</kbd><span></span></div>
+
+    <!-- ปุ่มลอย -->
+    <div id="dock">
+      <button id="btn-act" class="btn btn-gold" disabled>ใช้ <kbd>E</kbd></button>
+      <button id="btn-list" class="btn btn-brown">ทำอะไรได้บ้าง</button>
+      <button id="btn-sleep" class="btn btn-brown">จบวัน</button>
+    </div>
+
+    <!-- ปุ่มเดิน (มือถือ) -->
+    <div id="dpad" aria-hidden="true">
+      <button data-dir="up">▲</button>
+      <button data-dir="left">◀</button>
+      <button data-dir="right">▶</button>
+      <button data-dir="down">▼</button>
+    </div>
+
+    <div id="toast" class="hidden"></div>
+
+    <!-- แถบโหมดจัดบ้าน -->
+    <div id="decor-bar" class="hidden">
+      <span class="decor-label">🛋 โหมดจัดบ้าน — ลากเฟอร์นิเจอร์ในห้อง</span>
+      <button id="decor-rotate" class="btn btn-brown sm">หมุน</button>
+      <button id="decor-clear" class="btn btn-brown sm">เก็บ</button>
+      <button id="decor-done" class="btn btn-gold sm">เสร็จ</button>
+    </div>
+
+    <div id="hint">เดินด้วย WASD / ลูกศร หรือคลิกในฉาก • กด E เพื่อใช้ของ</div>
+  </div>
+
+  <!-- ===== หน้าต่าง/แผง ===== -->
+  <div id="modal-wrap" class="hidden" role="dialog" aria-modal="true">
+    <div id="modal">
+      <div id="modal-head">
+        <h2 id="modal-title">สมุดชีวิต</h2>
+        <button id="modal-close" class="x" aria-label="ปิด">✕</button>
+      </div>
+      <div id="modal-tabs"></div>
+      <div id="modal-body"></div>
+      <div id="modal-foot"></div>
+    </div>
+  </div>
+
+  <!-- ===== หน้าเริ่มเกม ===== -->
+  <div id="start-screen">
+    <div class="start-card">
+      <div class="start-hero">
+        <div class="logo">PIXEL<span>LIFE</span></div>
+        <p class="tag">ชีวิตเล็ก ๆ ในเมืองใหญ่ — เล่นได้ในเบราว์เซอร์ ไม่ต้องโหลดเกมหนัก</p>
+        <div id="start-buttons">
+          <button id="btn-continue" class="btn btn-gold big hidden">เล่นต่อจากเซฟ</button>
+          <button id="btn-new" class="btn btn-gold big">เริ่มชีวิตใหม่</button>
+          <button id="btn-howto" class="btn btn-ghost">วิธีเล่น</button>
+        </div>
+        <div id="howto" class="hidden">
+          <h3>เล่นอย่างไร</h3>
+          <ol>
+            <li><b>วางแผนวัน</b> — ทุกเช้าเลือกกิจกรรม 3 ช่วง (เช้า/บ่าย/เย็น) ทำตามแผนได้โบนัส ผิดแผนมีบทลงโทษ</li>
+            <li><b>เดินสำรวจ</b> — ใช้ WASD/ลูกศร/คลิก หรือปุ่มลูกศรบนจอ เดินเข้าใกล้ของแล้วกด <kbd>E</kbd></li>
+            <li><b>รักษาชีวิต</b> — กินข้าว พักผ่อน ลดเครียด ทำงานหาเงิน จ่ายบิลทุก 28 วัน</li>
+            <li><b>สร้างอนาคต</b> — เรียน เก็บทักษะ สะสมของ เปิดร้าน มีครอบครัว</li>
+          </ol>
+          <p class="dim">ทุกอย่างบันทึกอัตโนมัติในเบราว์เซอร์</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== สร้างตัวละคร ===== -->
+  <div id="create-screen" class="hidden">
+    <div class="create-card">
+      <h2>สร้างชีวิตใหม่</h2>
+      <p class="dim">เริ่มตอนอายุ 6 ขวบ — พ่อแม่ กรรมพัน และเป้าหมายชีวิตจะหล่อหลอมเส้นทางของคุณ</p>
+      <div class="create-grid">
+        <label>ชื่อ<input id="c-name" maxlength="16" value="นุ่น" /></label>
+        <label>เพศ
+          <select id="c-gender"><option>หญิง</option><option>ชาย</option></select>
+        </label>
+        <label>ฐานะครอบครัว
+          <select id="c-wealth">
+            <option value="0">พออยู่พอกิน (เริ่ม ฿800)</option>
+            <option value="1" selected>ปานกลาง (เริ่ม ฿2,000)</option>
+            <option value="2">รวย (เริ่ม ฿6,500)</option>
+          </select>
+        </label>
+        <label>พ่อแม่ / กรรมพัน
+          <select id="c-trait"></select>
+        </label>
+        <label>เป้าหมายชีวิต
+          <select id="c-goal"></select>
+        </label>
+        <label>ผ้าห่อตัว
+          <select id="c-outfit"></select>
+        </label>
+        <label>สีผิว
+          <select id="c-skin"></select>
+        </label>
+        <label>สีผม
+          <select id="c-hair"></select>
+        </label>
+        <label>ทรงผม
+          <select id="c-style"></select>
+        </label>
+        <label>เครื่องประดับ
+          <select id="c-accessory"></select>
+        </label>
+      </div>
+      <div class="create-preview">
+        <canvas id="preview" width="120" height="150"></canvas>
+        <div id="trait-desc" class="dim"></div>
+      </div>
+      <div class="create-buttons">
+        <button id="btn-create-back" class="btn btn-ghost">ย้อนกลับ</button>
+        <button id="btn-create-go" class="btn btn-gold big">เริ่มชีวิต</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script src="js/data.js?v=19"></script>
+<script src="js/state.js?v=19"></script>
+<script src="js/render.js?v=19"></script>
+<script src="js/ui.js?v=19"></script>
+<script src="js/main.js?v=19"></script>
+</body>
+</html>
